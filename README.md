@@ -6,7 +6,8 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Paper](https://img.shields.io/badge/paper-arxiv-red.svg)](https://arxiv.org/abs/2509.24361)
-[![Hugging Face Model](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-yellow.svg)](https://huggingface.co/neovateai/UI-UG-7B)
+[![Hugging Face Model](https://img.shields.io/badge/🤗%20Hugging%20Face-UI--UG--7B-yellow.svg)](https://huggingface.co/neovateai/UI-UG-7B)
+[![Hugging Face Model](https://img.shields.io/badge/🤗%20Hugging%20Face-UI--UG--7B--2601-orange.svg)](https://huggingface.co/neovateai/UI-UG-7B-2601)
 [![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-181717.svg?logo=github)](https://github.com/neovateai/UI-UG)
 
 [**📖 Paper**](https://arxiv.org/abs/2509.24361) | [**🤗 Model**](https://huggingface.co/neovateai/UI-UG-7B) | [**🚀 Quick Start**](#-quick-start) | [**📊 Evaluation**](#-evaluation) | [**📄 License**](#-license)
@@ -17,8 +18,10 @@
 
 UI-UG (A Unified MLLM for UI Understanding and Generation) is a multimodal large model that simultaneously supports both UI understanding and UI generation. It supports various tasks including referring, grounding, captioning and generation.
 
+> **🚀 New Release: UI-UG-7B-2601 🔥🔥🔥 ** - This latest version delivers significant improvements in aesthetic quality while maintaining enhanced UI understanding performance. The new model achieves visual appeal comparable to closed-source alternatives, making it ideal for production applications requiring both accuracy and beautiful UI generation.
+
 <div align="center">
-  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*zS0OS4ygszoAAAAAYaAAAAgAepd5AQ/original" alt="UI-UG Model Demo Overview" width="900px">
+  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*7ZqrR6mlQ2gAAAAAVxAAAAgAepd5AQ/original" alt="UI-UG Model Demo Overview" width="900px">
   <p><em>Figure 1: Overview of UI-UG. The workflow includes 1) Data preparation (UI image collection + element detection + DSL generation); 2) Two-stage training: SFT with VQA dataset, then RL optimization using GRPO and DPO for each task. The model supports UI understanding tasks (referring and grounding) and enables both offline and real-time UI generation.</em></p>
 </div>
 
@@ -302,19 +305,19 @@ SAMPLING_CONFIG = {
 | **Generation** | UI code generation | JSON format accuracy, LLM-based judgement (following Web2Code) |
 
 <div align="center">
-  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*BEXJRYktR-oAAAAAVsAAAAgAepd5AQ/original" alt="UI-UG Understanding Evaluation" width="900px">
-  <p><em>Table 1: Performance comparison of different models on referring and grounding tasks.</em></p>
+  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*uqydRLNHAvwAAAAAT2AAAAgAepd5AQ/original" alt="UI-UG Understanding Evaluation" width="900px">
+  <p><em>Table 1: Performance comparison of different models on referring and grounding tasks.(UI-UG-7B-2601)</em></p>
 </div>
 
 <div align="center">
-  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*IHONQZa83ZQAAAAAT5AAAAgAepd5AQ/original" alt="UI-UG Generation Evaluation" width="900px">
-  <p><em>Table 2: Performance comparison of different models on generation tasks.</em></p>
+  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*eYvnRrt3l2YAAAAASFAAAAgAepd5AQ/original" alt="UI-UG Generation Evaluation" width="500px">
+  <p><em>Table 2: Performance comparison of different models on generation tasks.(UI-UG-7B-2601)</em></p>
 </div>
 
 <div align="center">
-  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*N3DVTqMsxUgAAAAAd_AAAAgAepd5AQ/original" alt="UI-UG Grounding Vis1" width="900px">
-  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*ckCUR6JpRE0AAAAAa3AAAAgAepd5AQ/original" alt="UI-UG Grounding Vis2" width="900px">
-  <p><em>Figure 2: Visual comparison of different models for grounding task for complex UIs.</em></p>
+  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*BDYJRpBDMpQAAAAAgBAAAAgAepd5AQ/original" alt="UI-UG Grounding Vis1" width="900px">
+  <img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*u6jvT7B63CYAAAAAdkAAAAgAepd5AQ/original" alt="UI-UG Grounding Vis2" width="900px">
+  <p><em>Figure 2: Visual comparison of different models for grounding task for complex UIs.(UI-UG-7B-2601)</em></p>
 </div>
 
 ## 📄 License
