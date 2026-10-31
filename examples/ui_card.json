@@ -1,0 +1,9 @@
+{
+  "type": "Tag",
+  "name": "div",
+  "className": "p-6 rounded-xl bg-white shadow",
+  "children": [
+    {"type": "Tag", "name": "h2", "className": "text-xl font-bold", "params": {"textContent": {"bindType": "Static", "value": "Welcome to UI-UG 2"}}},
+    {"type": "Tag", "name": "button", "className": "mt-4 px-4 py-2 bg-blue-600 text-white rounded", "params": {"textContent": {"bindType": "Static", "value": "Continue"}}}
+  ]
+}

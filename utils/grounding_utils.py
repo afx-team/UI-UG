@@ -1,75 +1,34 @@
-import cv2
-import numpy as np
-import requests
+"""Visualize structured boxes with an explicit coordinate convention."""
 import json
-from qwen_vl_utils import smart_resize
+from io import BytesIO
+from pathlib import Path
+from utils.coordinates import parse_coordinates, to_pixel_box
 
-IMAGE_FACTOR = 28
-MIN_PIXELS = 64 * 28 * 28
-MAX_PIXELS = 1280 * 28 * 28
 
-def visualize_box_image(name, url, boxes_with_labels_ori, coord_parser="sr"):
-    boxes_with_labels_ori = json.loads(boxes_with_labels_ori)
-
-    boxes_with_labels = []
-    for box in boxes_with_labels_ori:
-        try:
-            box_coord = [int(num.strip()) for pair in box["box"].strip("()").split("),(") for num in pair.split(",")]
-        except:
-            box_coord = json.loads(box["box"])
-
-        boxes_with_labels.append((box_coord, box['type']))
-
-    response = requests.get(url)
-    img_array = np.frombuffer(response.content, np.uint8)
-    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-    width = img.shape[1]
-    height = img.shape[0]
-    r_height, r_width = smart_resize(height, width, IMAGE_FACTOR, MIN_PIXELS, MAX_PIXELS)
-
-    box_cnt = -1
-    for box, label in boxes_with_labels:
-        box_cnt += 1
-        x1, y1, x2, y2 = map(int, box)
-
-        if coord_parser == "sr":
-            x1 = int(x1 / r_width * width + 0.5)
-            y1 = int(y1 / r_height * height + 0.5)
-            x2 = int(x2 / r_width * width + 0.5)
-            y2 = int(y2 / r_height * height + 0.5)
-        elif coord_parser == "norm":
-            x1 = round(x1 * width, 3)
-            y1 = round(y1 * height, 3)
-            x2 = round(x2 * width, 3)
-            y2 = round(y2 * height, 3)
-        elif coord_parser == "qwen2":
-            x1 = int(x1 / 1000 * width + 0.5)
-            y1 = int(y1 / 1000 * height + 0.5)
-            x2 = int(x2 / 1000 * width + 0.5)
-            y2 = int(y2 / 1000 * height + 0.5)
-
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6
-        font_thickness = 2
-        text_size = cv2.getTextSize(label, font, font_scale, font_thickness)[0]
-        text_width, text_height = text_size
-        padding = 3
-
-        label_y = max(y1 - 10, text_height + padding)
-        label_x = x1
-        if label_x + text_width > img.shape[1]:
-            label_x = img.shape[1] - text_width - 5
-        cv2.putText(
-            img,
-            str(box_cnt) + "_" + label,
-            (label_x + padding, y1 - 5),
-            font,
-            font_scale,
-            (0, 0, 0),
-            font_thickness,
-            lineType=cv2.LINE_AA
-        )
-
-    cv2.imwrite(f"{name}.png", img)
+def visualize_box_image(name, url, boxes_with_labels_ori, coord_parser="0-1000", resized_size=None):
+    from PIL import Image, ImageDraw
+    if str(url).startswith(("http://", "https://")):
+        import requests
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        image = Image.open(BytesIO(response.content)).convert("RGB")
+    else:
+        image = Image.open(url).convert("RGB")
+    boxes = json.loads(boxes_with_labels_ori) if isinstance(boxes_with_labels_ori, str) else boxes_with_labels_ori
+    draw = ImageDraw.Draw(image)
+    aliases = {"norm": "0-1", "qwen2": "0-1000", "pixel": "pixel"}
+    mode = aliases.get(coord_parser, coord_parser)
+    for index, item in enumerate(boxes):
+        raw = parse_coordinates(item["box"]) if isinstance(item["box"], str) else item["box"]
+        if mode == "sr":
+            if not resized_size or len(resized_size) != 2:
+                raise ValueError("Resized-pixel boxes require explicit resized_size=(width, height)")
+            box = to_pixel_box(raw, *resized_size, "pixel")
+            box = [value * image.size[i % 2] / resized_size[i % 2] for i, value in enumerate(box)]
+        else:
+            box = to_pixel_box(raw, *image.size, mode)
+        draw.rectangle(box, outline="lime", width=2)
+        draw.text((box[0], max(0, box[1] - 12)), f'{index}: {item.get("type", item.get("category", ""))}', fill="red")
+    output = Path(f"{name}.png")
+    image.save(output)
+    return output

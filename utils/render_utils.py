@@ -1,243 +1,132 @@
+"""JSON DSL to HTML, with optional explicit Playwright screenshots."""
+import argparse
+import base64
+from html import escape
 import json
+import os
 from pathlib import Path
-
-try:
-    from playwright.sync_api import sync_playwright, Error, TimeoutError
-except ImportError:
-    print("Error: Playwright library is not installed.")
-    print("Please run the following commands to install:")
-    print("1. pip install playwright")
-    print("2. playwright install")
-    exit()
+import re
 
 
-# DSL renderer for converting JSON-based DSL to HTML
 class DslRenderer:
-    """A renderer that converts DSL (Domain Specific Language) JSON to HTML."""
-    
-    def _find_data_fields_recursive(self, node: dict, fields_set: set):
-        """
-        Recursively find all data binding fields in the DSL tree.
-        
-        Args:
-            node: Current DSL node being processed
-            fields_set: Set to collect unique field names for data binding
-        """
-        if not isinstance(node, dict): 
+    """Render the HTML-tag subset of the supplied UI DSL."""
+
+    def _find_data_fields_recursive(self, node, fields):
+        if not isinstance(node, dict):
             return
-        if "params" in node and isinstance(node["params"], dict):
-            for attr_config in node["params"].values():
-                if isinstance(attr_config, dict) and attr_config.get("bindType") == "Data":
-                    field = attr_config.get("bindField")
-                    if field: 
-                        fields_set.add(field)
-        if "children" in node and isinstance(node["children"], list):
-            for child_node in node["children"]: 
-                self._find_data_fields_recursive(child_node, fields_set)
+        for config in node.get("params", {}).values():
+            if isinstance(config, dict) and config.get("bindType") == "Data":
+                field = config.get("bindField")
+                if field:
+                    fields[field] = config.get("bindMock", f"Sample{field}")
+        for child in node.get("children", []):
+            self._find_data_fields_recursive(child, fields)
 
-    def generate_mock_data(self, dsl_json_string: str) -> dict:
-        """
-        Generate mock data for all data binding fields found in the DSL.
-        
-        Args:
-            dsl_json_string: JSON string containing the DSL definition
-            
-        Returns:
-            Dictionary with mock data for each data field
-        """
-        dsl_tree = json.loads(dsl_json_string)
-        data_fields = set()
-        self._find_data_fields_recursive(dsl_tree, data_fields)
-        mock_data = {}
-        for field in data_fields:
-            if '].' in field:
-                continue
-            simple_name = field.split('.')[-1]
-            mock_data[field] = f"Sample{simple_name}"
-        return mock_data
+    def generate_mock_data(self, dsl_json_string):
+        tree = json.loads(dsl_json_string)
+        fields = {}
+        self._find_data_fields_recursive(tree, fields)
+        return fields
 
-    def render(self, dsl_json_string: str, data: dict) -> str:
-        """
-        Render DSL JSON to HTML with data binding.
-        
-        Args:
-            dsl_json_string: JSON string containing the DSL definition
-            data: Dictionary containing data for binding
-            
-        Returns:
-            HTML string representation of the DSL
-        """
-        dsl_tree = json.loads(dsl_json_string)
-        return self._render_node_recursive(dsl_tree, data)
+    def render(self, dsl_json_string, data=None):
+        return self._render_node_recursive(json.loads(dsl_json_string), data or {})
 
-    def _render_node_recursive(self, node: dict, data: dict) -> str:
-        """
-        Recursively render a DSL node to HTML.
-        
-        Args:
-            node: Current DSL node being processed
-            data: Dictionary containing data for binding
-            
-        Returns:
-            HTML string representation of the node
-        """
-        if not isinstance(node, dict) or "type" not in node: 
-            return ""
-            
-        tag_name = node.get("name", "div")
+    def _render_node_recursive(self, node, data):
+        if not isinstance(node, dict) or node.get("type") not in ("Tag", "Component"):
+            raise ValueError("DSL node requires type Tag or Component")
+        if node["type"] == "Component":
+            raise ValueError("Component nodes require the matching front-end component runtime")
+        tag = node.get("name", "div")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9-]*", tag):
+            raise ValueError("Invalid HTML tag")
+        if tag.lower() in {"script", "iframe", "object", "embed", "base", "meta", "link", "style"}:
+            raise ValueError("Unsupported DSL tag")
         attributes = []
-        
-        if node.get("className"): 
-            attributes.append(f'class="{node["className"]}"')
-            
-        text_content = ""
-        
-        # Process parameters and data binding
-        if "params" in node and isinstance(node["params"], dict):
-            for attr_name, attr_config in node["params"].items():
-                bind_type = attr_config.get("bindType")
-                value = ""
-                
-                if bind_type == "Static":
-                    value = attr_config.get("value", "")
-                elif bind_type == "Data":
-                    bind_field = attr_config.get("bindField")
-                    if bind_field: 
-                        value = data.get(bind_field, "")
-                        
-                if attr_name == "textContent":
-                    text_content = str(value)
-                else:
-                    attributes.append(f'{attr_name}="{str(value)}"')
-                    
-        # Process children nodes
-        children_html = ""
-        if "children" in node and isinstance(node["children"], list):
-            for child_node in node["children"]: 
-                children_html += self._render_node_recursive(child_node, data)
-                
-        attributes_str = " ".join(attributes)
-        self_closing_tags = {"img", "br", "hr", "input", "meta", "link"}
-        
-        if tag_name in self_closing_tags:
-            return f'<{tag_name} {attributes_str}>'
-        else:
-            return f'<{tag_name} {attributes_str}>{text_content}{children_html}</{tag_name}>'
+        if node.get("className"):
+            attributes.append('class="' + escape(str(node["className"]), quote=True) + '"')
+        text = ""
+        for name, config in node.get("params", {}).items():
+            if not isinstance(config, dict):
+                raise ValueError("DSL parameter definitions must be objects")
+            if config.get("bindType") == "Static":
+                value = config.get("value", "")
+            elif config.get("bindType") == "Data":
+                value = data.get(config.get("bindField"), "")
+            else:
+                raise ValueError("Unknown DSL binding type")
+            if name == "textContent":
+                text = escape(str(value))
+            else:
+                if not re.fullmatch(r"[A-Za-z_:][A-Za-z0-9_.:-]*", name) or name.lower().startswith("on"):
+                    raise ValueError("Invalid DSL attribute")
+                if name.lower() in ("href", "src") and str(value).strip().lower().startswith("javascript:"):
+                    raise ValueError("Invalid URL attribute")
+                attributes.append(name + '="' + escape(str(value), quote=True) + '"')
+        attrs = (" " + " ".join(attributes)) if attributes else ""
+        if tag.lower() in {"img", "br", "hr", "input", "source", "wbr", "area", "col"}:
+            return f"<{tag}{attrs}>"
+        children = "".join(self._render_node_recursive(child, data) for child in node.get("children", []))
+        return f"<{tag}{attrs}>{text}{children}</{tag}>"
 
 
-def capture_component_screenshot(html_content: str, output_path: str, target_selector: str):
-    """
-    Capture screenshot of HTML content using Playwright, waiting for specific selector.
+def build_html(dsl_data, tailwind_css_path=None, font_ttf_path=None):
+    renderer = DslRenderer()
+    if isinstance(dsl_data, dict) and "dsl_code" in dsl_data:
+        code = dsl_data["dsl_code"]
+        mock = dsl_data.get("mock_data")
+        data = json.loads(mock) if isinstance(mock, str) else mock
+    else:
+        code = dsl_data if isinstance(dsl_data, str) else json.dumps(dsl_data)
+        data = None
+    if data is None:
+        data = renderer.generate_mock_data(code)
+    css_path = tailwind_css_path or os.getenv("TAILWIND_CSS_PATH")
+    font_path = font_ttf_path or os.getenv("FONT_TTF_PATH")
+    css = Path(css_path).read_text() if css_path else ""
+    font = ""
+    if font_path:
+        encoded = base64.b64encode(Path(font_path).read_bytes()).decode("ascii")
+        font = "@font-face{font-family:UISans;src:url(data:font/ttf;base64," + encoded + ")}body{font-family:UISans,sans-serif}"
+    body = renderer.render(code, data)
+    return ('<!doctype html><html><head><meta charset="utf-8"><style>'
+            + css + font + '</style></head><body style="margin:0">'
+            + '<div id="component-root" style="display:inline-block">' + body + '</div></body></html>')
 
-    Args:
-        html_content: Complete HTML string to render
-        output_path: Path where the screenshot will be saved
-        target_selector: CSS selector of the target element to wait for and screenshot (e.g., '#component-root')
-    """
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.set_viewport_size({"width": 800, "height": 600})
 
-        # Load content without relying on wait_until="networkidle"
-        page.set_content(html_content)
+def capture_component_screenshot(html_content, output_path, target_selector="#component-root"):
+    from playwright.sync_api import sync_playwright
 
-        # Set reasonable timeout of 15 seconds
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
         try:
-            component_element = page.locator(target_selector)
-            component_element.wait_for(state="visible", timeout=15000)
-
-            # Wait briefly for animations or final styling to complete
-            page.wait_for_timeout(900)
-
-            component_element.screenshot(path=output_path)
+            page = browser.new_page(viewport={"width": 800, "height": 600}, java_script_enabled=False)
+            page.set_content(html_content)
+            page.locator(target_selector).screenshot(path=str(output_path), timeout=15000)
         finally:
             browser.close()
 
 
-def process_and_screenshot_task(renderer: DslRenderer, dsl_data, output_path, html_name):
-    """
-    Core task function for processing DSL and capturing screenshots.
-    
-    Args:
-        renderer: DslRenderer instance for DSL processing
-        dsl_data: DSL data (string or dict with 'dsl_code' and 'mock_data')
-        output_path: Path where the screenshot will be saved
-        html_name: Name for the intermediate HTML file
-        
-    Returns:
-        String indicating success or failure message
-    """
-    try:
-        # Handle different data formats
-        if type(dsl_data) is dict:
-            dsl_code = dsl_data['dsl_code']
-            mock_data = dsl_data['mock_data'] if 'mock_data' in dsl_data else None
-
-            if mock_data is None:
-                processed_mock_data = renderer.generate_mock_data(dsl_code)
-            else:
-                processed_mock_data = json.loads(mock_data)
-                
-            component_html = renderer.render(dsl_code, processed_mock_data)
-        else:
-            processed_mock_data = renderer.generate_mock_data(dsl_data)
-            component_html = renderer.render(dsl_data, processed_mock_data)
-            
-        # Add unique ID for target component in HTML template
-        target_id = "component-root"
-
-        full_html_for_screenshot = f"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <script src="https://cdn.tailwindcss.com"></script>
-        </head>
-        <body style="background-color: transparent; margin: 0; padding: 0;">
-            <!-- Added target ID for component selection -->
-            <div id="{target_id}" style="display: inline-block;">
-                {component_html}
-            </div>
-        </body>
-        </html>
-        """
-        
-        # Save HTML file for reference
-        with open(html_name, 'w', encoding='utf-8') as f:
-            f.write(full_html_for_screenshot)
-
-        # Capture screenshot with updated function
-        capture_component_screenshot(
-            html_content=full_html_for_screenshot,
-            output_path=output_path,
-            target_selector=f"#{target_id}"
-        )
-        return f"Success: {Path(output_path).name}"
-    except TimeoutError:
-        return f"Failed (Timeout): {Path(output_path).name} - Element did not appear within timeout."
-    except Exception as e:
-        # Catch all other errors
-        return f"Failed (Error): {Path(output_path).name} with error: {repr(e).__name__}: {str(e)}"
+def process_and_screenshot_task(renderer, dsl_data, output_path, html_name=None):
+    html = build_html(dsl_data)
+    if html_name:
+        Path(html_name).write_text(html)
+    capture_component_screenshot(html, output_path)
+    return f"Success: {Path(output_path).name}"
 
 
-# Main execution block
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", required=True, help="JSON DSL file")
+    parser.add_argument("--html", required=True, help="Output HTML file")
+    parser.add_argument("--png", help="Optional screenshot; explicitly starts Chromium")
+    parser.add_argument("--tailwind-css")
+    parser.add_argument("--font")
+    args = parser.parse_args()
+    html = build_html(json.loads(Path(args.input).read_text()), args.tailwind_css, args.font)
+    Path(args.html).write_text(html)
+    if args.png:
+        capture_component_screenshot(html, args.png)
+
+
 if __name__ == "__main__":
-    # Initialize renderer
-    renderer = DslRenderer()
-    
-    # Sample DSL code for testing
-    dsl_code = '{"type":"Tag","name":"div","className":"w-full p-4 bg-white rounded-lg shadow-md flex flex-col items-center space-y-4","children":[{"type":"Tag","name":"h1","className":"text-xl font-bold text-gray-800 mb-2","params":{"textContent":{"bindType":"Static","value":"You can borrow"}}},{"type":"Tag","name":"span","className":"inline-block px-2 py-1 text-sm font-semibold leading-tight text-blue-600 bg-blue-100 rounded-full","params":{"textContent":{"bindType":"Static","value":"Credit protection enabled"}}},{"type":"Tag","name":"p","className":"text-4xl font-extrabold mt-4","params":{"textContent":{"bindType":"Data","bindField":"loanAmount"}}},{"type":"Tag","name":"p","className":"text-base text-gray-600","params":{"textContent":{"bindType":"Static","value":"Total limit "}},"children":[{"type":"Tag","name":"span","className":"font-semibold","params":{"textContent":{"bindType":"Data","bindField":"totalQuota"}}},{"type":"Tag","name":"span","className":"ml-1","params":{"textContent":{"bindType":"Static","value":", daily interest "}},"children":[{"type":"Tag","name":"span","className":"text-red-500 font-semibold","params":{"textContent":{"bindType":"Data","bindField":"dailyInterestRate"}}}]}]},{"type":"Tag","name":"div","className":"flex items-center bg-yellow-50 rounded-lg p-2 w-max mx-auto","children":[{"type":"Tag","name":"img","className":"w-6 h-6 mr-2","params":{"src":{"bindType":"Static","value":"<image>red packet icon</image>"}}},{"type":"Tag","name":"span","className":"text-blue-600 font-medium","params":{"textContent":{"bindType":"Static","value":"Multiple discounts available"}}}]},{"type":"Tag","name":"button","className":"bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 rounded-3xl py-2 px-4 border-0 inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none w-full max-w-xs","params":{"textContent":{"bindType":"Static","value":"Apply for loan"}}},{"type":"Tag","name":"button","className":"bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-3xl py-2 px-4 border border-gray-300 inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none w-full max-w-xs","params":{"textContent":{"bindType":"Static","value":"Repay loan"}},"children":[{"type":"Tag","name":"span","className":"block text-sm text-gray-500 mt-1","params":{"textContent":{"bindType":"Static","value":"Due today "}},"children":[{"type":"Tag","name":"span","className":"font-semibold","params":{"textContent":{"bindType":"Data","bindField":"todayRepaymentAmount"}}}]}]}]}'
-    
-    # Generate mock data or use custom data
-    mock_data = renderer.generate_mock_data(dsl_code)
-    
-    # Prepare DSL data for processing
-    dsl_data = {
-        'dsl_code': dsl_code,
-        'mock_data': json.dumps(mock_data)
-    }
-    
-    # Process and capture screenshot
-    res_message = process_and_screenshot_task(renderer, dsl_data, "render_ui.png", "render_ui.html")
-    print(res_message)
+    main()

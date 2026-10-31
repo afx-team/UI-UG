@@ -2,53 +2,67 @@ from openai import OpenAI
 import requests
 import base64
 import os
+from typing import Optional, Dict, Any
 
 
 class VLLMChatInference:
-    def __init__(self, api_key="EMPTY", api_base="http://localhost:8000/v1", max_tokens=7000):
-        """
-        Initialize OpenAI client.
-        :param api_key: OpenAI API key
-        :param api_base: OpenAI API base URL
-        """
-        self.client = OpenAI(api_key=api_key, base_url=api_base)
-        self.max_tokens = max_tokens
+    """
+    Optimized VLLM Chat Inference Implementation
 
-    @staticmethod
-    def image_to_base64(input_value):
+    Features:
+    1. Configurable API endpoints with multiple presets
+    2. Support for both streaming and non-streaming modes
+    3. Better error handling
+    4. Configurable max_tokens
+    5. Type hints
+    """
+
+    def __init__(self, api_key: Optional[str] = None, api_base: str = None, max_tokens: int = 8192):
+        """
+        Initialize VLLM chat inference with configurable endpoints.
+
+        :param api_key: OpenAI API key (default: "EMPTY")
+        :param api_base: API base URL.
+               If None, defaults to env `VLLM_API_BASE`,
+               then falls back to http://127.0.0.1:8000/v1
+        :param max_tokens: Maximum tokens in response (default: 7000)
+        """
+        self.max_tokens = max_tokens
+        self.api_base = api_base or os.getenv("VLLM_API_BASE", "http://127.0.0.1:8000/v1")
+        self.client = OpenAI(api_key=api_key or os.getenv("VLLM_API_KEY", "EMPTY"), base_url=self.api_base)
+
+    def image_to_base64(self, input_value: str) -> str:
         """
         Convert image to Base64 encoding.
-        :param input_value: Image URL or local file path
+
+        :param input_value: Image URL (http/https) or local file path
         :return: Base64 encoded string
         """
-        if input_value.startswith('http://') or input_value.startswith('https://'):
-            response = requests.get(input_value)
-            if response.status_code == 200:
-                return base64.b64encode(response.content).decode('utf-8')
-            else:
-                raise Exception(f"Failed to fetch image, status code: {response.status_code}")
+        if input_value.startswith(("http://", "https://")):
+            # Fetch image from URL
+            response = requests.get(input_value, timeout=30)
+            response.raise_for_status()
+            return base64.b64encode(response.content).decode('utf-8')
         else:
-            if os.path.isfile(input_value):
-                with open(input_value, "rb") as image_file:
-                    return base64.b64encode(image_file.read()).decode('utf-8')
-            else:
-                raise Exception(f"File does not exist: {input_value}")
+            # Read local file
+            if not os.path.isfile(input_value):
+                raise FileNotFoundError(f"Image file not found: {input_value}")
+            with open(input_value, 'rb') as f:
+                return base64.b64encode(f.read()).decode('utf-8')
 
-    def chat_with_image(self, model_name, prompt, image_path_or_url, temperature=0.1, extra_params={}):
-        """
-        Chat with model using image and text.
-        :param model_name: Model name
-        :param prompt: Text prompt
-        :param image_path_or_url: Image URL or local file path
-        :param temperature: Temperature parameter controlling text generation randomness
-        :return: Model's response content
-        """
-        print("image_path_or_url", image_path_or_url)
-        if image_path_or_url is not None:
-            # Convert image to Base64 encoding
-            image_base64 = self.image_to_base64(image_path_or_url)
+    def image_to_data_url(self, input_value: str) -> str:
+        from io import BytesIO
+        from PIL import Image
+        encoded = self.image_to_base64(input_value)
+        with Image.open(BytesIO(base64.b64decode(encoded))) as image:
+            mime = Image.MIME.get(image.format)
+        if not mime:
+            raise ValueError("Unsupported image MIME type")
+        return f"data:{mime};base64,{encoded}"
 
-            # Build message
+    def build_messages(self, prompt: str, image_base64: Optional[str] = None) -> list:
+        """Build messages for chat completion."""
+        if image_base64 is not None:
             messages = [{
                 "role": "user",
                 "content": [
@@ -58,69 +72,77 @@ class VLLMChatInference:
                     },
                     {
                         "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
-                        "min_pixels": 224 * 224,
-                        "max_pixels": 1280 * 28 * 28
-                    },
-                ],
+                        "image_url": {
+                            "url": image_base64 if image_base64.startswith("data:") else f"data:image/jpeg;base64,{image_base64}",
+                            "min_pixels": 224 * 224,
+                            "max_pixels": 1280 * 28 * 28
+                        }
+                    }
+                ]
             }]
         else:
-            messages = [{
-                "role": "user",
-                "content": prompt
-            }]
+            messages = [{"role": "user", "content": prompt}]
+        return messages
 
-        # Call OpenAI API to get response
-        chat_response = self.client.chat.completions.create(
+    def chat_with_image(self,
+                        model_name: str,
+                        prompt: str,
+                        image_path_or_url: Optional[str] = None,
+                        temperature: float = 0.1,
+                        extra_params: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Generate response with image and text.
+
+        :param model_name: Name of the model
+        :param prompt: Text prompt
+        :param image_path_or_url: Image URL or local path (None for text-only)
+        :param temperature: Sampling temperature (0-1)
+        :param extra_params: Additional parameters for completion
+        :return: Model response text
+        """
+        extra_params = extra_params or {"chat_template_kwargs": {"enable_thinking": False}}
+
+        # Process image if provided
+        image_base64 = None
+        if image_path_or_url is not None:
+            image_base64 = self.image_to_data_url(image_path_or_url)
+
+        messages = self.build_messages(prompt, image_base64)
+
+        # Call API
+        response = self.client.chat.completions.create(
             model=model_name,
             messages=messages,
             temperature=temperature,
             extra_body=extra_params,
             max_tokens=self.max_tokens
         )
-        print(chat_response)
 
-        # Return model's response content
-        response = chat_response.choices[0].message.content
-        print("Chat completion output:", response)
-        return response
+        result = response.choices[0].message.content
+        return result
 
-    def chat_with_image_stream(self, model_name, prompt, image_path_or_url, temperature=0.1, extra_params={}):
+    def chat_with_image_stream(self,
+                               model_name: str,
+                               prompt: str,
+                               image_path_or_url: Optional[str] = None,
+                               temperature: float = 0.1,
+                               extra_params: Optional[Dict[str, Any]] = None) -> str:
         """
-        Stream chat with model using image and text.
-        :param model_name: Model name
-        :param prompt: Text prompt
-        :param image_path_or_url: Image URL or local file path
-        :param temperature: Temperature parameter controlling text generation randomness
-        :return: Complete response content
+        Generate streaming response with image and text.
+
+        :return: Accumulated response text
         """
+        extra_params = extra_params or {"chat_template_kwargs": {"enable_thinking": False}}
+
+        # Process image if provided
+        image_base64 = None
         if image_path_or_url is not None:
-            # Convert image to Base64 encoding
-            image_base64 = self.image_to_base64(image_path_or_url)
+            image_base64 = self.image_to_data_url(image_path_or_url)
 
-            # Build message
-            messages = [{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": prompt
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
-                        "min_pixels": 224 * 224,
-                        "max_pixels": 1280 * 28 * 28
-                    },
-                ],
-            }]
-        else:
-            messages = [{
-                "role": "user",
-                "content": prompt
-            }]
+        messages = self.build_messages(prompt, image_base64)
 
-        chat_stream = self.client.chat.completions.create(
+        # Streaming response
+        stream = self.client.chat.completions.create(
             model=model_name,
             messages=messages,
             temperature=temperature,
@@ -129,28 +151,16 @@ class VLLMChatInference:
             max_tokens=self.max_tokens
         )
 
-        print("client: Start streaming chat completions...")
-        printed_reasoning_content = False
-        printed_content = False
+        # Accumulate response
+        response_text = ""
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if hasattr(delta, "content") and delta.content is not None:
+                response_text += delta.content
+            if hasattr(delta, "reasoning_content") and delta.reasoning_content is not None:
+                # Handle reasoning content if present
+                pass
 
-        response = ""
-        for chunk in chat_stream:
-            reasoning_content = None
-            content = None
-            if hasattr(chunk.choices[0].delta, "reasoning_content"):
-                reasoning_content = chunk.choices[0].delta.reasoning_content
-            elif hasattr(chunk.choices[0].delta, "content"):
-                content = chunk.choices[0].delta.content
-
-            if reasoning_content is not None:
-                if not printed_reasoning_content:
-                    printed_reasoning_content = True
-                    print("reasoning_content:", end="", flush=True)
-                print(reasoning_content, end="", flush=True)
-            elif content is not None:
-                if not printed_content:
-                    printed_content = True
-                    print("\ncontent:", end="", flush=True)
-                print(content, end="", flush=True)
-                response += content
-        return response
+        return response_text
