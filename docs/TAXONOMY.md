@@ -2,7 +2,7 @@
 
 The complete taxonomy follows the paper appendix: **71 fine output labels grouped into nine parents**. Parent groups are not added to the fine-label vocabulary. In particular, `Image` is both a valid fine label and the name of its parent group.
 
-![Complete UI taxonomy with nine parent groups and 71 fine categories](../figures/uiug2_taxonomy.png)
+![Complete UI taxonomy with nine parent groups and 71 fine categories](https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*DKlhRZUPjusAAAAAX3AAAAgAepd5AQ/original)
 
 | Parent | Fine labels | Count |
 |---|---|---|

@@ -1,4 +1,4 @@
-# 🎯 UI-UG 2: Mobile UI Understanding and Generation
+# 🎯 UI-UG 2: Advancing Mobile UI Understanding and Generation with Fine-Grained Supervision and Reinforcement Learning
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -10,9 +10,9 @@
 
 ## 🌟 Overview
 
-**UI-UG 2** is a compact **4B-parameter multimodal model** that unifies fine-grained mobile UI understanding and structured UI generation. It combines a Qwen3-VL backbone, a front-end-aligned component taxonomy, expanded grounding capabilities, and online render-aware reinforcement learning.
+**UI-UG 2** (A Unified MLLM for UI Understanding and Generation) is a compact **4B-parameter multimodal model** that unifies fine-grained mobile UI understanding and structured UI generation. It combines a Qwen3-VL backbone, a front-end-aligned component taxonomy, expanded grounding capabilities, and online render-aware reinforcement learning.
 
-![UI-UG 2 overview](figures/uiug2_overview.png)
+![UI-UG 2 overview](https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*LDZFQ7d3RKQAAAAAUOAAAAgAepd5AQ/original)
 
 ## 🆕 What changed from UI-UG?
 
@@ -30,7 +30,7 @@ This repository provides inference, serving, and JSON DSL rendering. The trainin
 
 The taxonomy covers **71 fine-grained categories across nine parent groups**, distinguishing component states, functional roles, and partially visible elements.
 
-![Nine parent groups and all 71 fine-grained UI categories, with state, function, and truncation examples](figures/uiug2_taxonomy.png)
+![Nine parent groups and all 71 fine-grained UI categories, with state, function, and truncation examples](https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*DKlhRZUPjusAAAAAX3AAAAgAepd5AQ/original)
 
 ## 📊 Benchmark highlights
 
@@ -40,21 +40,21 @@ The following charts summarize the results reported in the paper. Each panel sho
 
 UI Understanding consists of Referring and Grounding. Grounding includes dense UI element detection and action-conditioned GUI target localization.
 
-![UI Understanding: Referring category accuracy, Dense Grounding F1, and GUI Grounding accuracy on ScreenSpot-V2 Mobile](figures/uiug2_understanding_results.png)
+![UI Understanding: Referring category accuracy, Dense Grounding F1, and GUI Grounding accuracy on ScreenSpot-V2 Mobile](https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*vIRSSJ4gX3oAAAAAVwAAAAgAepd5AQ/original)
 
 **🖼️ Dense Grounding: qualitative comparison**
 
-![Dense Grounding predictions from seven models on two UI cases, reproduced from the paper](figures/uiug2_dense_grounding_cases.png)
+![Dense Grounding predictions from seven models on two UI cases, reproduced from the paper](https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*s-XsSZb7f5kAAAAAgCAAAAgAepd5AQ/original)
 
 Two dense UI cases from the paper, with the same model order in each row. UI-UG 2-4B is shown in the rightmost column.
 
 ### 🎨 UI Generation
 
-![UI generation composite scores reported in the UI-UG 2 paper](figures/uiug2_generation_results.png)
+<img src="https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*-3zvQJFoyWIAAAAASOAAAAgAepd5AQ/original" alt="UI generation composite scores reported in the UI-UG 2 paper" width="60%">
 
 **🖼️ Generation: qualitative comparison**
 
-![Poster card and login interface generation comparisons reproduced from the paper](figures/uiug2_generation_cases.png)
+![Poster card and login interface generation comparisons reproduced from the paper](https://mdn.alipayobjects.com/huamei_v87pyo/afts/img/A*hILmQpzvv2QAAAAAgCAAAAgAepd5AQ/original)
 
 Poster card and login interface comparisons from the paper. The reference image is on the left, and UI-UG 2-4B is shown in the rightmost column.
 
